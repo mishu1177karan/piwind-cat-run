@@ -18,6 +18,7 @@ Writes ep_curves.html next to this script, with plotly.js inlined
 
 import argparse
 import csv
+import json
 from pathlib import Path
 
 import plotly.graph_objects as go
@@ -28,6 +29,13 @@ EPTYPE_OEP = 1
 EPTYPE_AEP = 3
 
 TABLE_RETURN_PERIODS = [10, 25, 50, 100, 200, 250, 500]
+
+# Portfolio facts fixed by the PiWind exposure itself (same across both
+# sample-count runs). Not derivable from this repo's output CSVs — sourced
+# from exposure_summary_report.json / model_settings.json in the original
+# OasisPiWind run, see RUNBOOK.md.
+PORTFOLIO_TIV = 3_400_000
+EVENT_COUNT = 1_447
 
 # One line per (peril, ep_type): (csv stem, EPType value, trace name, color, dash)
 SERIES = [
@@ -51,6 +59,47 @@ def read_ept(path: Path, ep_type: int, ep_calc: int):
 
 def fmt_money(v: float) -> str:
     return f"${v:,.0f}"
+
+
+def count_samples(out_dir: Path) -> int:
+    """Derive the actual number of damage samples used from the data
+    itself (distinct SampleId in the per-sample EP table), rather than
+    trusting a config file to match what was actually run."""
+    psept_path = out_dir / "gul_S1_psept.csv"
+    with psept_path.open() as f:
+        return len({row["SampleId"] for row in csv.DictReader(f)})
+
+
+def read_model_info() -> dict:
+    settings_path = REPO_DIR / "analysis_settings.json"
+    with settings_path.open() as f:
+        d = json.load(f)
+    return {
+        "model_name_id": d.get("model_name_id", "?"),
+        "model_supplier_id": d.get("model_supplier_id", "?"),
+    }
+
+
+def build_header_html(out_dir: Path) -> str:
+    model = read_model_info()
+    samples = count_samples(out_dir)
+    return f"""
+<style>
+  .run-header {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    max-width: 900px; margin: 0 auto; padding: 12px 16px; margin-bottom: 8px;
+    background: #f7f7f5; border: 1px solid #e2e0db; border-radius: 8px;
+    font-size: 13px; color: #2a2825; display: flex; flex-wrap: wrap; gap: 4px 24px;
+  }}
+  .run-header b {{ color: #6b6862; font-weight: 600; margin-right: 4px; }}
+</style>
+<div class="run-header">
+  <span><b>Model:</b> {model['model_name_id']} ({model['model_supplier_id']})</span>
+  <span><b>Portfolio TIV:</b> {fmt_money(PORTFOLIO_TIV)}</span>
+  <span><b>Events:</b> {EVENT_COUNT:,}</span>
+  <span><b>Samples used ({out_dir.name}):</b> {samples:,}</span>
+</div>
+"""
 
 
 def build_table_html(series_points: list) -> str:
@@ -136,13 +185,14 @@ def main():
         hovermode="x unified",
     )
 
+    header_html = build_header_html(out_dir)
     chart_html = fig.to_html(include_plotlyjs="inline", full_html=False)
     table_html = build_table_html(series_points)
 
     out_path = REPO_DIR / "ep_curves.html"
     out_path.write_text(
         f"<!doctype html>\n<html><head><meta charset='utf-8'></head>"
-        f"<body>{chart_html}{table_html}</body></html>"
+        f"<body>{header_html}{chart_html}{table_html}</body></html>"
     )
     print(f"wrote {out_path}")
 
