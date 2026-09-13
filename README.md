@@ -88,6 +88,18 @@ a real capital or pricing decision resting on a specific return-period
 number should use enough samples (and/or enough simulated years) that
 re-running with more of either doesn't move the answer.
 
+## EP curve viewer
+
+`ep_viewer.html` is a self-contained, offline viewer — open it directly in
+a browser (`file://.../ep_viewer.html`, no server needed). Drag in one or
+more `*_ept.csv` files (e.g. both `gul_S1_ept.csv` from
+`output-10samples/` and `output-1000samples/`), pick the exceedance type
+(OEP/AEP) and calculation basis, and it plots the loss-vs-return-period
+curve with a hover tooltip and a table of exact values. Loading exactly
+two files adds a "% diff" column to that table, reproducing the
+sampling-convergence comparison above for any pair of runs. Nothing is
+uploaded anywhere — files are parsed entirely client-side.
+
 ## Other output files
 
 - `_melt`/`_selt`/`_qelt`: event loss tables (moment / sample / quantile)

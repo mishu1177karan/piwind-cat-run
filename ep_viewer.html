@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PiWind EP Curve Viewer</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --panel: #ffffff;
+    --border: #e2e0db;
+    --text: #2a2825;
+    --text-dim: #6b6862;
+    --accent: #b45309;
+    --grid: #e8e6e1;
+    --series: #2563eb, #b45309, #059669, #dc2626, #7c3aed, #0891b2, #db2777, #65a30d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1b19;
+      --panel: #26241f;
+      --border: #3a3733;
+      --text: #ece9e3;
+      --text-dim: #a39e94;
+      --accent: #f0a860;
+      --grid: #3a3733;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    padding: 24px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .subtitle { color: var(--text-dim); margin: 0 0 20px; font-size: 13px; }
+  .layout { display: grid; grid-template-columns: 280px 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .panel + .panel { margin-top: 16px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--text-dim); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .03em; }
+  label:first-child { margin-top: 0; }
+  select, input[type=file] {
+    width: 100%;
+    padding: 7px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+  }
+  .drop {
+    border: 1.5px dashed var(--border);
+    border-radius: 8px;
+    padding: 18px 10px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  .drop:hover, .drop.drag { border-color: var(--accent); color: var(--accent); }
+  .drop input { display: none; }
+  .file-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .file-row {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12.5px; padding: 6px 8px; border-radius: 6px;
+    background: var(--bg); border: 1px solid var(--border);
+  }
+  .swatch { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-meta { color: var(--text-dim); font-size: 11px; }
+  .file-remove { cursor: pointer; color: var(--text-dim); font-size: 15px; line-height: 1; padding: 0 2px; }
+  .file-remove:hover { color: #dc2626; }
+  .empty { color: var(--text-dim); font-size: 13px; padding: 40px 0; text-align: center; }
+  svg { width: 100%; height: auto; overflow: visible; }
+  .grid-line { stroke: var(--grid); stroke-width: 1; }
+  .axis-line { stroke: var(--text-dim); stroke-width: 1; }
+  .axis-label { fill: var(--text-dim); font-size: 11px; }
+  .axis-title { fill: var(--text-dim); font-size: 12px; }
+  .curve { fill: none; stroke-width: 2; }
+  .dot { cursor: pointer; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 12.5px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-swatch { width: 12px; height: 3px; border-radius: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 4px; }
+  th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--text-dim); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .02em; }
+  tbody tr:hover { background: var(--bg); }
+  .diff-pos { color: #b45309; }
+  .diff-neg { color: #2563eb; }
+  #tooltip {
+    position: fixed; pointer-events: none; z-index: 10;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.15);
+    display: none; white-space: nowrap;
+  }
+  .hint { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<h1>PiWind EP Curve Viewer</h1>
+<p class="subtitle">Local, offline viewer for OasisLMF <code>*_ept.csv</code> exceedance-probability tables. Nothing leaves your browser — files are read locally.</p>
+
+<div class="layout">
+  <div>
+    <div class="panel">
+      <label>Load EPT files</label>
+      <div class="drop" id="drop">
+        Click or drag <code>*_ept.csv</code> files here
+        <input id="file-input" type="file" accept=".csv" multiple>
+      </div>
+      <div class="file-list" id="file-list"></div>
+      <div class="hint">Load two or more files (e.g. 10-sample vs 1000-sample <code>gul_S1_ept.csv</code>) to compare curves and see % difference in the table.</div>
+    </div>
+
+    <div class="panel">
+      <label>Exceedance type</label>
+      <select id="ep-type">
+        <option value="1">OEP — Occurrence</option>
+        <option value="3">AEP — Aggregate</option>
+        <option value="2">OEP TVaR</option>
+        <option value="4">AEP TVaR</option>
+      </select>
+
+      <label>Calculation basis</label>
+      <select id="ep-calc">
+        <option value="2">Full uncertainty (all samples as trials)</option>
+        <option value="1">Mean damage ratio</option>
+        <option value="3">Per-sample mean</option>
+        <option value="4">Mean sample</option>
+      </select>
+
+      <label>Summary ID</label>
+      <select id="summary-id"><option value="all">All</option></select>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <div id="chart-wrap"><div class="empty">Load one or more <code>_ept.csv</code> files to plot a curve.</div></div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="panel" id="table-panel" style="display:none;">
+      <label style="margin-top:0;">Values at plotted points</label>
+      <div style="overflow-x:auto;"><table id="data-table"></table></div>
+    </div>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+const COLORS = ['#2563eb', '#b45309', '#059669', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#65a30d'];
+const EPTYPE_LABEL = {1: 'OEP', 2: 'OEP TVaR', 3: 'AEP', 4: 'AEP TVaR'};
+const EPCALC_LABEL = {1: 'Mean damage ratio', 2: 'Full uncertainty', 3: 'Per-sample mean', 4: 'Mean sample'};
+
+let datasets = []; // { name, color, rows: [{SummaryId, EPCalc, EPType, ReturnPeriod, Loss}] }
+
+const fileInput = document.getElementById('file-input');
+const drop = document.getElementById('drop');
+const fileList = document.getElementById('file-list');
+const epTypeSel = document.getElementById('ep-type');
+const epCalcSel = document.getElementById('ep-calc');
+const summaryIdSel = document.getElementById('summary-id');
+
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+drop.addEventListener('drop', e => {
+  e.preventDefault();
+  drop.classList.remove('drag');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+function handleFiles(files) {
+  [...files].forEach(file => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const rows = parseCSV(reader.result);
+      if (!rows.length) { alert(`${file.name}: no rows parsed — is this an _ept.csv file?`); return; }
+      const color = COLORS[datasets.length % COLORS.length];
+      datasets.push({ name: file.name, color, rows });
+      renderFileList();
+      populateSummaryIds();
+      render();
+    };
+    reader.readAsText(file);
+  });
+  fileInput.value = '';
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (!lines.length) return [];
+  const header = lines[0].split(',').map(h => h.trim());
+  const idx = {
+    SummaryId: header.indexOf('SummaryId'),
+    EPCalc: header.indexOf('EPCalc'),
+    EPType: header.indexOf('EPType'),
+    ReturnPeriod: header.indexOf('ReturnPeriod'),
+    Loss: header.indexOf('Loss'),
+  };
+  if (idx.EPType === -1 || idx.ReturnPeriod === -1 || idx.Loss === -1) return [];
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const cols = lines[i].split(',');
+    rows.push({
+      SummaryId: cols[idx.SummaryId],
+      EPCalc: +cols[idx.EPCalc],
+      EPType: +cols[idx.EPType],
+      ReturnPeriod: +cols[idx.ReturnPeriod],
+      Loss: +cols[idx.Loss],
+    });
+  }
+  return rows;
+}
+
+function renderFileList() {
+  fileList.innerHTML = '';
+  datasets.forEach((ds, i) => {
+    const row = document.createElement('div');
+    row.className = 'file-row';
+    row.innerHTML = `
+      <span class="swatch" style="background:${ds.color}"></span>
+      <span class="file-name" title="${ds.name}">${ds.name}</span>
+      <span class="file-meta">${ds.rows.length} rows</span>
+      <span class="file-remove" data-i="${i}">&times;</span>
+    `;
+    row.querySelector('.file-remove').addEventListener('click', () => {
+      datasets.splice(i, 1);
+      renderFileList();
+      populateSummaryIds();
+      render();
+    });
+    fileList.appendChild(row);
+  });
+}
+
+function populateSummaryIds() {
+  const ids = new Set();
+  datasets.forEach(ds => ds.rows.forEach(r => ids.add(r.SummaryId)));
+  const current = summaryIdSel.value;
+  summaryIdSel.innerHTML = '<option value="all">All</option>';
+  [...ids].sort().forEach(id => {
+    const opt = document.createElement('option');
+    opt.value = id; opt.textContent = id;
+    summaryIdSel.appendChild(opt);
+  });
+  if ([...ids].includes(current)) summaryIdSel.value = current;
+}
+
+[epTypeSel, epCalcSel, summaryIdSel].forEach(el => el.addEventListener('change', render));
+
+function getSeries() {
+  const epType = +epTypeSel.value;
+  const epCalc = +epCalcSel.value;
+  const sid = summaryIdSel.value;
+  return datasets.map(ds => {
+    let rows = ds.rows.filter(r => r.EPType === epType && r.EPCalc === epCalc);
+    if (sid !== 'all') rows = rows.filter(r => r.SummaryId === sid);
+    // aggregate duplicate ReturnPeriods (e.g. multiple SummaryIds under "All") by sum
+    const byRP = new Map();
+    rows.forEach(r => byRP.set(r.ReturnPeriod, (byRP.get(r.ReturnPeriod) || 0) + r.Loss));
+    const points = [...byRP.entries()].map(([rp, loss]) => ({ rp, loss })).sort((a, b) => b.rp - a.rp);
+    return { name: ds.name, color: ds.color, points };
+  }).filter(s => s.points.length);
+}
+
+function render() {
+  const series = getSeries();
+  const wrap = document.getElementById('chart-wrap');
+  const legend = document.getElementById('legend');
+  const tablePanel = document.getElementById('table-panel');
+
+  if (!series.length) {
+    wrap.innerHTML = datasets.length
+      ? '<div class="empty">No rows match this Exceedance type / Calculation basis / Summary ID combination.</div>'
+      : '<div class="empty">Load one or more <code>_ept.csv</code> files to plot a curve.</div>';
+    legend.innerHTML = '';
+    tablePanel.style.display = 'none';
+    return;
+  }
+
+  drawChart(series, wrap);
+  drawLegend(series, legend);
+  drawTable(series);
+  tablePanel.style.display = '';
+}
+
+function drawLegend(series, legend) {
+  legend.innerHTML = series.map(s => `
+    <span class="legend-item">
+      <span class="legend-swatch" style="background:${s.color}"></span>${s.name}
+    </span>
+  `).join('');
+}
+
+function drawChart(series, wrap) {
+  const W = 760, H = 380, M = { top: 16, right: 24, bottom: 44, left: 84 };
+  const plotW = W - M.left - M.right, plotH = H - M.top - M.bottom;
+
+  const allRP = series.flatMap(s => s.points.map(p => p.rp)).filter(rp => rp > 0);
+  const allLoss = series.flatMap(s => s.points.map(p => p.loss));
+  const rpMin = Math.min(...allRP), rpMax = Math.max(...allRP);
+  const lossMax = Math.max(...allLoss, 1);
+
+  const xLog = rp => {
+    const lo = Math.log10(rpMin), hi = Math.log10(rpMax);
+    const t = hi === lo ? 0.5 : (Math.log10(rp) - lo) / (hi - lo);
+    return M.left + t * plotW;
+  };
+  const yLin = loss => M.top + plotH - (loss / lossMax) * plotH;
+
+  // gridlines / y ticks
+  const yTicks = 5;
+  let gridSvg = '', yLabelsSvg = '';
+  for (let i = 0; i <= yTicks; i++) {
+    const val = (lossMax / yTicks) * i;
+    const y = yLin(val);
+    gridSvg += `<line class="grid-line" x1="${M.left}" x2="${W - M.right}" y1="${y}" y2="${y}"/>`;
+    yLabelsSvg += `<text class="axis-label" x="${M.left - 8}" y="${y + 4}" text-anchor="end">${fmtMoney(val)}</text>`;
+  }
+
+  // x ticks: nice round return periods present in data range
+  const candidateTicks = [2,5,10,20,25,30,50,75,100,150,200,250,500,1000,5000,10000];
+  const xTicks = candidateTicks.filter(t => t >= rpMin && t <= rpMax);
+  let xLabelsSvg = '', xGridSvg = '';
+  xTicks.forEach(t => {
+    const x = xLog(t);
+    xGridSvg += `<line class="grid-line" x1="${x}" x2="${x}" y1="${M.top}" y2="${M.top + plotH}"/>`;
+    xLabelsSvg += `<text class="axis-label" x="${x}" y="${M.top + plotH + 18}" text-anchor="middle">${t}</text>`;
+  });
+
+  let curvesSvg = '';
+  series.forEach(s => {
+    const pts = s.points.filter(p => p.rp > 0);
+    const path = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xLog(p.rp).toFixed(1)} ${yLin(p.loss).toFixed(1)}`).join(' ');
+    curvesSvg += `<path class="curve" d="${path}" stroke="${s.color}"/>`;
+    pts.forEach(p => {
+      curvesSvg += `<circle class="dot" cx="${xLog(p.rp).toFixed(1)}" cy="${yLin(p.loss).toFixed(1)}" r="3.5" fill="${s.color}"
+        data-name="${s.name}" data-rp="${p.rp}" data-loss="${p.loss}"/>`;
+    });
+  });
+
+  wrap.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}">
+      ${gridSvg}${xGridSvg}
+      <line class="axis-line" x1="${M.left}" x2="${W - M.right}" y1="${M.top + plotH}" y2="${M.top + plotH}"/>
+      <line class="axis-line" x1="${M.left}" x2="${M.left}" y1="${M.top}" y2="${M.top + plotH}"/>
+      ${yLabelsSvg}${xLabelsSvg}
+      <text class="axis-title" x="${M.left + plotW / 2}" y="${H - 4}" text-anchor="middle">Return period (years, log scale)</text>
+      <text class="axis-title" transform="rotate(-90)" x="${-(M.top + plotH / 2)}" y="16" text-anchor="middle">Loss ($)</text>
+      ${curvesSvg}
+    </svg>
+  `;
+
+  const tooltip = document.getElementById('tooltip');
+  wrap.querySelectorAll('.dot').forEach(dot => {
+    dot.addEventListener('mousemove', e => {
+      tooltip.style.display = 'block';
+      tooltip.style.left = (e.clientX + 14) + 'px';
+      tooltip.style.top = (e.clientY + 14) + 'px';
+      tooltip.innerHTML = `<b>${dot.dataset.name}</b><br>RP ${dot.dataset.rp}: ${fmtMoney(+dot.dataset.loss)}`;
+    });
+    dot.addEventListener('mouseleave', () => tooltip.style.display = 'none');
+  });
+}
+
+function drawTable(series) {
+  const table = document.getElementById('data-table');
+  const allRP = [...new Set(series.flatMap(s => s.points.map(p => p.rp)))].sort((a, b) => b - a);
+
+  let thead = '<thead><tr><th>Return Period</th>';
+  series.forEach(s => thead += `<th>${s.name}</th>`);
+  if (series.length === 2) thead += '<th>% diff</th>';
+  thead += '</tr></thead>';
+
+  let tbody = '<tbody>';
+  allRP.forEach(rp => {
+    tbody += `<tr><td>${rp}</td>`;
+    const vals = series.map(s => s.points.find(p => p.rp === rp)?.loss);
+    vals.forEach(v => tbody += `<td>${v === undefined ? '—' : fmtMoney(v)}</td>`);
+    if (series.length === 2 && vals[0] !== undefined && vals[1] !== undefined) {
+      const pct = vals[0] === 0 ? 0 : ((vals[1] - vals[0]) / vals[0]) * 100;
+      const cls = pct > 0 ? 'diff-pos' : pct < 0 ? 'diff-neg' : '';
+      tbody += `<td class="${cls}">${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%</td>`;
+    }
+    tbody += '</tr>';
+  });
+  tbody += '</tbody>';
+
+  table.innerHTML = thead + tbody;
+}
+
+function fmtMoney(v) {
+  if (Math.abs(v) >= 1e6) return '$' + (v / 1e6).toFixed(2) + 'M';
+  if (Math.abs(v) >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K';
+  return '$' + v.toFixed(0);
+}
+</script>
+</body>
+</html>
