@@ -31,10 +31,10 @@ TABLE_RETURN_PERIODS = [10, 25, 50, 100, 200, 250, 500]
 
 # One line per (peril, ep_type): (csv stem, EPType value, trace name, color, dash)
 SERIES = [
-    ("gul_S1", EPTYPE_OEP, "GUL OEP", "#2563eb", "solid"),
-    ("gul_S1", EPTYPE_AEP, "GUL AEP", "#2563eb", "dash"),
-    ("il_S1", EPTYPE_OEP, "IL OEP", "#b45309", "solid"),
-    ("il_S1", EPTYPE_AEP, "IL AEP", "#b45309", "dash"),
+    ("gul_S1", EPTYPE_OEP, "GUL OEP (per-occurrence)", "#2563eb", "solid"),
+    ("gul_S1", EPTYPE_AEP, "GUL AEP (aggregate annual)", "#2563eb", "dash"),
+    ("il_S1", EPTYPE_OEP, "IL OEP (per-occurrence)", "#b45309", "solid"),
+    ("il_S1", EPTYPE_AEP, "IL AEP (aggregate annual)", "#b45309", "dash"),
 ]
 
 
@@ -70,7 +70,8 @@ def build_table_html(series_points: list) -> str:
     return f"""
 <style>
   .ep-table-wrap {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 900px; margin: 24px auto 0; }}
-  .ep-table-wrap h2 {{ font-size: 16px; color: #2a2825; margin: 0 0 10px; }}
+  .ep-table-wrap h2 {{ font-size: 16px; color: #2a2825; margin: 0 0 6px; }}
+  .ep-table-wrap p.legend-note {{ font-size: 12.5px; color: #6b6862; margin: 0 0 14px; }}
   .ep-table-wrap table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
   .ep-table-wrap th, .ep-table-wrap td {{ text-align: right; padding: 7px 10px; border-bottom: 1px solid #e2e0db; }}
   .ep-table-wrap th:first-child, .ep-table-wrap td:first-child {{ text-align: left; }}
@@ -79,6 +80,12 @@ def build_table_html(series_points: list) -> str:
 </style>
 <div class="ep-table-wrap">
   <h2>Losses at standard return periods</h2>
+  <p class="legend-note">
+    <b>OEP</b> (Occurrence Exceedance Probability, per-occurrence) &mdash;
+    loss from the single worst event in a year.
+    <b>AEP</b> (Aggregate Exceedance Probability, aggregate annual) &mdash;
+    summed loss from every event in a year. AEP &ge; OEP at every return period.
+  </p>
   <table>{thead}{tbody}</table>
 </div>
 """
