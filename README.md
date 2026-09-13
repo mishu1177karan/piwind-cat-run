@@ -15,8 +15,11 @@ purposes. See `RUNBOOK.md` for the full install/reproduction steps.
   event
 - **Command**: `oasislmf model run -C oasislmf.json` (config and analysis
   settings included in this repo)
-- **Outputs**: `output/` — ground-up (`gul_S1_*`), insured/net (`il_S1_*`),
-  and net-of-reinsurance (`ri_S1_*`) loss tables
+- **Outputs**: `output-10samples/` — ground-up (`gul_S1_*`), insured/net
+  (`il_S1_*`), and net-of-reinsurance (`ri_S1_*`) loss tables, from the
+  default 10-damage-sample run. `output-1000samples/` holds the same run
+  repeated with `number_of_samples: 1000` (see `analysis_settings_1000samples.json`
+  and the sampling convergence section below)
 
 ## What the AEP/OEP numbers mean
 
@@ -43,6 +46,47 @@ just the max, AEP ≥ OEP at every return period for the same book. E.g. at
 the 1-in-1000 return period, GUL OEP = $3.4M (the worst single event maxes
 out the portfolio) while GUL AEP = $6.48M (the worst *year* had more than
 one damaging event).
+
+## Sampling convergence: 10 vs 1000 samples
+
+`analysis_settings_1000samples.json` is the same analysis settings with
+`number_of_samples` raised from 10 to 1000, run into `output-1000samples/`.
+Comparing the GUL OEP curve (full-uncertainty, `EPCalc=2`) between the two
+runs at the standard return periods (`comparison/gul_oep_10_vs_1000samples.csv`):
+
+| Return Period | OEP, 10 samples | OEP, 1000 samples | % diff |
+|---:|---:|---:|---:|
+| 10  | $689,655  | $696,467  | +0.99% |
+| 25  | $1,451,253 | $1,495,937 | +3.08% |
+| 50  | $2,549,346 | $2,580,060 | +1.20% |
+| 100 | $3,385,139 | $3,385,008 | -0.00% |
+| 200 | $3,400,000 | $3,400,000 | 0.00% |
+| 250 | $3,400,000 | $3,400,000 | 0.00% |
+
+**What this means for tail estimates.** The `EPCalc=2` OEP curve treats each
+damage sample as its own independent trial, so 10 samples × 1,000 simulated
+years gives 10,000 trials, while 1000 samples gives 1,000,000. More trials
+means the tail of the loss distribution — the region these return periods
+are drawn from — is resolved with less Monte Carlo noise: with only 10
+samples, a single unlucky/lucky draw at a given location can shift an
+estimated return-period loss by a few percent purely by chance, not because
+the underlying risk changed. That's exactly the pattern above: the biggest
+differences (+3.08% at RP 25, +1.20% at RP 50) sit in the *mid* curve, where
+loss varies continuously between "no damage" and "capped at TIV" and so is
+most sensitive to how well the 10-sample run happened to cover that range.
+
+At RP 100 and above, both runs converge to the same number (essentially
+$3.4M — the full portfolio TIV) because at that severity the model is
+saturated: enough locations are being maxed out that the number of damage
+samples barely matters, there's no more variance left for extra samples to
+resolve. In general, low-severity/high-frequency parts of a loss curve
+converge fast (they're built from many observations), while rare/extreme
+outcomes converge slowly and need more samples (or more simulated years) to
+pin down with confidence — the classic Monte Carlo tradeoff between runtime
+and tail precision. A 10-sample PiWind run is fine for a quick smoke test;
+a real capital or pricing decision resting on a specific return-period
+number should use enough samples (and/or enough simulated years) that
+re-running with more of either doesn't move the answer.
 
 ## Other output files
 
