@@ -152,6 +152,11 @@ def main():
         help="EPCalc to plot: 1=mean damage ratio, 2=full uncertainty "
              "(default), 3=per-sample mean, 4=mean sample.",
     )
+    parser.add_argument(
+        "--out", default="ep_curves.html",
+        help="Output HTML filename (relative to this script). "
+             "Default: ep_curves.html",
+    )
     args = parser.parse_args()
 
     out_dir = REPO_DIR / args.output_dir
@@ -189,7 +194,7 @@ def main():
     chart_html = fig.to_html(include_plotlyjs="inline", full_html=False)
     table_html = build_table_html(series_points)
 
-    out_path = REPO_DIR / "ep_curves.html"
+    out_path = REPO_DIR / args.out
     out_path.write_text(
         f"<!doctype html>\n<html><head><meta charset='utf-8'></head>"
         f"<body>{header_html}{chart_html}{table_html}</body></html>"
